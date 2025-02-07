@@ -5,13 +5,8 @@ session_start();
 $upload_dir = 'C:/nas_storage/'; // Thư mục lưu trữ file
 $max_file_size = 1024 * 1024 * 100; // 100MB
 $log_file = 'C:/nas_storage/log.txt'; // File log hoạt động
-
-// Danh sách người dùng và mật khẩu đã được hash
 $users = [
     'admin' => password_hash('admin123', PASSWORD_BCRYPT), // User mẫu
-    'user1' => password_hash('password1', PASSWORD_BCRYPT), // Thêm tài khoản user1
-    'user2' => password_hash('password2', PASSWORD_BCRYPT), // Thêm tài khoản user2
-    'user3' => password_hash('password3', PASSWORD_BCRYPT), // Thêm tài khoản user3
 ];
 
 // Hàm ghi log
@@ -45,12 +40,73 @@ if (isset($_GET['logout'])) {
 // Kiểm tra đăng nhập
 if (!isset($_SESSION['username'])) {
     echo '
-    <form method="post">
-        Username: <input type="text" name="username" required><br>
-        Password: <input type="password" name="password" required><br>
-        <input type="submit" name="login" value="Login">
-    </form>
-    ';
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>NAS Simulator</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+        <style>
+            /* CSS từ index1.php.txt */
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+                font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+                min-height: 100vh;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            }
+            .login-container {
+                max-width: 400px;
+                padding: 2rem;
+                background: white;
+                border-radius: 15px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+                text-align: center;
+            }
+            .login-container h1 {
+                margin-bottom: 2rem;
+                color: #2a5298;
+            }
+            .form-group { margin-bottom: 1.5rem; }
+            input[type="text"], input[type="password"] {
+                width: 100%;
+                padding: 0.8rem 1rem;
+                border: 2px solid #ddd;
+                border-radius: 8px;
+                font-size: 1rem;
+            }
+            .btn {
+                padding: 0.8rem 1.5rem;
+                border: none;
+                border-radius: 8px;
+                font-size: 1rem;
+                cursor: pointer;
+                transition: all 0.3s ease;
+            }
+            .btn-primary {
+                background: #4a90e2;
+                color: white;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="login-container">
+            <h1><i class="fas fa-lock"></i> NAS Login</h1>
+            <form method="post">
+                <div class="form-group">
+                    <input type="text" name="username" placeholder="Username" required>
+                </div>
+                <div class="form-group">
+                    <input type="password" name="password" placeholder="Password" required>
+                </div>
+                <button type="submit" name="login" class="btn btn-primary">
+                    <i class="fas fa-sign-in-alt"></i> Login
+                </button>
+            </form>
+        </div>
+    </body>
+    </html>';
     exit;
 }
 
@@ -60,29 +116,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
     $subdir = isset($_POST['subdir']) ? trim($_POST['subdir'], '/') . '/' : '';
     $target_dir = $upload_dir . $subdir;
 
-    // Tạo thư mục nếu chưa tồn tại
-    if (!is_dir($target_dir)) {
-        mkdir($target_dir, 0777, true);
-    }
+    if (!is_dir($target_dir)) mkdir($target_dir, 0777, true);
+    if ($file['error'] !== UPLOAD_ERR_OK) die("Upload error: " . $file['error']);
+    if ($file['size'] > $max_file_size) die("File exceeds 100MB limit");
 
-    // Kiểm tra lỗi
-    if ($file['error'] !== UPLOAD_ERR_OK) {
-        die("Upload thất bại với mã lỗi: " . $file['error']);
-    }
-
-    // Kiểm tra kích thước file
-    if ($file['size'] > $max_file_size) {
-        die("File vượt quá kích thước cho phép (100MB)");
-    }
-
-    // Tạo tên file an toàn
     $file_name = basename($file['name']);
     $target_path = $target_dir . $file_name;
 
-    // Di chuyển file vào thư mục lưu trữ
     if (move_uploaded_file($file['tmp_name'], $target_path)) {
-        log_activity("User {$_SESSION['username']} uploaded file: $subdir$file_name");
-        echo "Upload thành công: " . htmlspecialchars($file_name);
+        log_activity("User {$_SESSION['username']} uploaded: $subdir$file_name");
+        echo "Upload thành công";
     } else {
         echo "Upload thất bại";
     }
@@ -91,18 +134,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
 // Xử lý download file
 if (isset($_GET['download'])) {
     $file_path = $upload_dir . basename($_GET['download']);
-
-    // Kiểm tra file tồn tại
     if (file_exists($file_path)) {
-        header('Content-Description: File Transfer');
         header('Content-Type: application/octet-stream');
         header('Content-Disposition: attachment; filename="'.basename($file_path).'"');
-        header('Expires: 0');
-        header('Cache-Control: must-revalidate');
-        header('Pragma: public');
-        header('Content-Length: ' . filesize($file_path));
         readfile($file_path);
-        log_activity("User {$_SESSION['username']} downloaded file: " . basename($file_path));
+        log_activity("User {$_SESSION['username']} downloaded: " . basename($file_path));
         exit;
     } else {
         die("File không tồn tại");
@@ -115,7 +151,7 @@ if (isset($_POST['create_dir'])) {
     if (!is_dir($new_dir)) {
         mkdir($new_dir, 0777, true);
         log_activity("User {$_SESSION['username']} created directory: $new_dir");
-        echo "Thư mục đã được tạo: " . htmlspecialchars($new_dir);
+        echo "Thư mục đã được tạo";
     } else {
         echo "Thư mục đã tồn tại";
     }
@@ -132,82 +168,147 @@ if (isset($_GET['search'])) {
         }
     }
 }
-
-// Hiển thị danh sách file
-function list_files($dir) {
-    $files = scandir($dir);
-    $files = array_diff($files, array('.', '..'));
-    echo "<ul>";
-    foreach ($files as $file) {
-        $file_path = $dir . $file;
-        if (is_dir($file_path)) {
-            echo "<li><strong>$file/</strong> <a href='?subdir=$file'>Mở</a></li>";
-        } else {
-            echo "<li>$file <a href='?download=$file'>Download</a></li>";
-        }
-    }
-    echo "</ul>";
-}
 ?>
 
 <!DOCTYPE html>
 <html>
 <head>
-    <style>
-        /* Các style CSS của bạn */
-    </style>
-    <link rel="stylesheet" href="style.css">
     <title>NAS Simulator</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        /* CSS từ index1.php.txt */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #eee;
+        }
+        .btn {
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .btn-primary { background: #4a90e2; color: white; }
+        .btn-danger { background: #e74c3c; color: white; }
+        .file-list { margin-top: 2rem; background: white; border-radius: 10px; }
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid #eee;
+        }
+        .file-icon {
+            width: 40px;
+            height: 40px;
+            margin-right: 1rem;
+            background: #4a90e2;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        @media (max-width: 768px) {
+            .container { margin: 1rem; padding: 1rem; }
+            .header { flex-direction: column; gap: 1rem; }
+            .btn { width: 100%; justify-content: center; }
+        }
+    </style>
 </head>
 <body>
     <div class="container">
-        <h1>NAS Simulator</h1>
-        <p>Xin chào, <?= htmlspecialchars($_SESSION['username']) ?>! <a href="?logout=1">Đăng xuất</a></p>
+        <div class="header">
+            <h1><i class="fas fa-folder"></i> NAS Simulator</h1>
+            <div class="user-info">
+                <span><i class="fas fa-user"></i> <?= htmlspecialchars($_SESSION['username']) ?></span>
+                <a href="?logout=1" class="btn btn-danger"><i class="fas fa-sign-out-alt"></i> Logout</a>
+            </div>
+        </div>
 
-        <!-- Form upload -->
-        <form method="post" enctype="multipart/form-data">
-            <input type="file" name="file" required>
-            <input type="text" name="subdir" placeholder="Thư mục con (tùy chọn)">
-            <input type="submit" value="Upload">
+        <!-- Upload & Create Folder -->
+        <div style="display: flex; gap: 1rem; margin-bottom: 2rem;">
+            <form method="post" enctype="multipart/form-data" style="flex-grow: 1;">
+                <div style="display: flex; gap: 0.5rem;">
+                    <input type="file" name="file" required style="flex-grow: 1;">
+                    <input type="text" name="subdir" placeholder="Subdirectory" style="flex-basis: 200px;">
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Upload</button>
+                </div>
+            </form>
+            <form method="post" style="display: flex; gap: 0.5rem;">
+                <input type="text" name="new_dir" placeholder="New directory" required>
+                <button type="submit" name="create_dir" class="btn btn-primary"><i class="fas fa-folder-plus"></i> Create</button>
+            </form>
+        </div>
+
+        <!-- Search -->
+        <form method="get" style="margin-bottom: 2rem;">
+            <div style="display: flex; gap: 0.5rem;">
+                <input type="text" name="search" placeholder="Search files..." required style="flex-grow: 1;">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i> Search</button>
+            </div>
         </form>
 
-        <!-- Tạo thư mục -->
-        <form method="post">
-            <input type="text" name="new_dir" placeholder="Tên thư mục mới" required>
-            <input type="submit" name="create_dir" value="Tạo thư mục">
-        </form>
-
-        <!-- Tìm kiếm file -->
-        <form method="get">
-            <input type="text" name="search" placeholder="Tìm kiếm file" required>
-            <input type="submit" value="Tìm kiếm">
-        </form>
-
-        <!-- Hiển thị kết quả tìm kiếm -->
+        <!-- Search Results -->
         <?php if (!empty($search_results)): ?>
-            <h3>Kết quả tìm kiếm:</h3>
-            <ul>
-                <?php foreach ($search_results as $result): ?>
-                    <li><?= htmlspecialchars($result) ?></li>
-                <?php endforeach; ?>
-            </ul>
+        <div class="search-results">
+            <h3>Search Results:</h3>
+            <?php foreach ($search_results as $result): ?>
+                <div class="file-item">
+                    <div class="file-icon"><i class="fas fa-file"></i></div>
+                    <div class="file-name"><?= htmlspecialchars($result) ?></div>
+                </div>
+            <?php endforeach; ?>
+        </div>
         <?php endif; ?>
 
-        <!-- Danh sách file -->
+        <!-- File List -->
         <div class="file-list">
-            <h3>Danh sách file:</h3>
             <?php
             $current_dir = $upload_dir . (isset($_GET['subdir']) ? $_GET['subdir'] . '/' : '');
-            list_files($current_dir);
+            $files = scandir($current_dir);
+            $files = array_diff($files, array('.', '..'));
+            
+            foreach ($files as $file): 
+                $file_path = $current_dir . $file;
+                $is_dir = is_dir($file_path);
             ?>
+                <div class="file-item">
+                    <div class="file-icon"><?= $is_dir ? '<i class="fas fa-folder"></i>' : '<i class="fas fa-file"></i>' ?></div>
+                    <div class="file-name">
+                        <?= htmlspecialchars($file) ?>
+                        <?php if ($is_dir): ?>
+                            <a href="?subdir=<?= urlencode($file) ?>" style="margin-left: 0.5rem; color: #4a90e2;">[Open]</a>
+                        <?php endif; ?>
+                    </div>
+                    <?php if (!$is_dir): ?>
+                        <a href="?download=<?= urlencode($file) ?>" class="btn btn-primary"><i class="fas fa-download"></i> Download</a>
+                    <?php endif; ?>
+                </div>
+            <?php endforeach; ?>
         </div>
     </div>
 </body>
 </html>
-
-<?php
-// Hiển thị nút quay lại nếu không ở thư mục gốc
-if (isset($_SERVER['HTTP_REFERER'])) {
-    echo '<a href="' . htmlspecialchars($_SERVER['HTTP_REFERER']) . '" class="back-button">Quay lại</a>';
-}
-?>
