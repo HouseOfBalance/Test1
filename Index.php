@@ -2,6 +2,8 @@
 <html>
 <head>
     <title>NAS Simulator</title>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         /* Reset CSS */
         * {
@@ -167,6 +169,23 @@
             color: #666;
         }
 
+        /* Loading animation */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
         /* Responsive design */
         @media (max-width: 768px) {
             .container {
@@ -178,13 +197,29 @@
                 flex-direction: column;
                 gap: 1rem;
             }
+
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .file-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+
+            .file-icon {
+                margin-right: 0;
+                margin-bottom: 0.5rem;
+            }
         }
     </style>
 </head>
 <body>
     <?php if (!isset($_SESSION['username'])): ?>
     <div class="login-container">
-        <h1>🔒 NAS Login</h1>
+        <h1><i class="fas fa-lock"></i> NAS Login</h1>
         <form method="post">
             <div class="form-group">
                 <input type="text" name="username" placeholder="Username" required>
@@ -192,16 +227,18 @@
             <div class="form-group">
                 <input type="password" name="password" placeholder="Password" required>
             </div>
-            <button type="submit" name="login" class="btn btn-primary">Login</button>
+            <button type="submit" name="login" class="btn btn-primary">
+                <span class="loading"></span> Login
+            </button>
         </form>
     </div>
     <?php else: ?>
     <div class="container">
         <div class="header">
-            <h1>📁 NAS Simulator</h1>
+            <h1><i class="fas fa-folder"></i> NAS Simulator</h1>
             <div class="user-info">
-                <span>👤 <?= htmlspecialchars($_SESSION['username']) ?></span>
-                <a href="?logout=1" class="btn btn-danger">Logout</a>
+                <span><i class="fas fa-user"></i> <?= htmlspecialchars($_SESSION['username']) ?></span>
+                <a href="?logout=1" class="btn btn-danger"><i class="fas fa-sign-out-alt"></i> Logout</a>
             </div>
         </div>
 
@@ -211,13 +248,13 @@
                 <div style="display: flex; gap: 0.5rem;">
                     <input type="file" name="file" required style="flex-grow: 1;">
                     <input type="text" name="subdir" placeholder="Subdirectory (optional)" style="flex-basis: 200px;">
-                    <button type="submit" class="btn btn-primary">📤 Upload</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Upload</button>
                 </div>
             </form>
             
             <form method="post" style="display: flex; gap: 0.5rem;">
                 <input type="text" name="new_dir" placeholder="New directory" required>
-                <button type="submit" name="create_dir" class="btn btn-primary">📁 Create Folder</button>
+                <button type="submit" name="create_dir" class="btn btn-primary"><i class="fas fa-folder-plus"></i> Create Folder</button>
             </form>
         </div>
 
@@ -225,7 +262,7 @@
         <form method="get" style="margin-bottom: 2rem;">
             <div style="display: flex; gap: 0.5rem;">
                 <input type="text" name="search" placeholder="Search files..." required style="flex-grow: 1;">
-                <button type="submit" class="btn btn-primary">🔍 Search</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i> Search</button>
             </div>
         </form>
 
@@ -235,7 +272,7 @@
             <h3>Search Results:</h3>
             <?php foreach ($search_results as $result): ?>
                 <div class="file-item">
-                    <div class="file-icon">📄</div>
+                    <div class="file-icon"><i class="fas fa-file"></i></div>
                     <div class="file-name"><?= htmlspecialchars($result) ?></div>
                 </div>
             <?php endforeach; ?>
@@ -254,7 +291,7 @@
                 $is_dir = is_dir($file_path);
             ?>
                 <div class="file-item">
-                    <div class="file-icon"><?= $is_dir ? '📁' : '📄' ?></div>
+                    <div class="file-icon"><?= $is_dir ? '<i class="fas fa-folder"></i>' : '<i class="fas fa-file"></i>' ?></div>
                     <div class="file-name">
                         <?= htmlspecialchars($file) ?>
                         <?php if ($is_dir): ?>
@@ -262,7 +299,7 @@
                         <?php endif; ?>
                     </div>
                     <?php if (!$is_dir): ?>
-                        <a href="?download=<?= urlencode($file) ?>" class="btn btn-primary">⬇️ Download</a>
+                        <a href="?download=<?= urlencode($file) ?>" class="btn btn-primary"><i class="fas fa-download"></i> Download</a>
                     <?php endif; ?>
                 </div>
             <?php endforeach; ?>
