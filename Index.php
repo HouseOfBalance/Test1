@@ -343,6 +343,26 @@ function display_files($dir) {
             from { transform: translateX(100%); }
             to { transform: translateX(0); }
         }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .upload-section {
+                padding: 1rem;
+            }
+            .file-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .file-actions {
+                margin-top: 0.5rem;
+            }
+        }
     </style>
 </head>
 <body>
