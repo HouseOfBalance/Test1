@@ -5,7 +5,7 @@ session_start();
 $upload_dir = 'C:/nas_storage/';
 $max_file_size = 1024 * 1024 * 100; // 100MB
 $log_file = 'C:/nas_storage/log.txt';
-$allowed_file_types = ['jpg', 'jpeg', 'png', 'pdf', 'txt']; // Các loại file cho phép
+$allowed_file_types = ['jpg', 'jpeg', 'png', 'pdf', 'txt', 'mp4', 'webm']; // Các loại file cho phép
 $users = [
     'admin' => password_hash('admin123', PASSWORD_BCRYPT),
 ];
@@ -130,12 +130,16 @@ function display_files($dir) {
     foreach (array_diff($files, ['.', '..']) as $file) {
         $file_path = $dir . $file;
         $is_dir = is_dir($file_path);
+        $file_ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+        $is_image = in_array($file_ext, ['jpg', 'jpeg', 'png', 'gif']);
+        $is_video = in_array($file_ext, ['mp4', 'webm']);
         
         echo '<div class="file-item">
-                <div class="file-icon">'.($is_dir ? '<i class="fas fa-folder"></i>' : '<i class="fas fa-file"></i>').'</div>
+                <div class="file-icon">'.($is_dir ? '<i class="fas fa-folder"></i>' : ($is_image ? '<i class="fas fa-image"></i>' : ($is_video ? '<i class="fas fa-video"></i>' : '<i class="fas fa-file"></i>'))).'</div>
                 <div class="file-name">'.htmlspecialchars($file).($is_dir ? '/' : '').'</div>
                 <div class="file-actions">'.
                     (!$is_dir ? 
+                    ($is_image || $is_video ? '<a href="?preview='.urlencode($file).'" class="btn-preview"><i class="fas fa-eye"></i></a>' : '') .
                     '<a href="?download='.urlencode($file).'" class="btn-download"><i class="fas fa-download"></i></a>
                      <a href="?delete='.urlencode($file).'" class="btn-delete" onclick="return confirm(\'Xóa file này?\')"><i class="fas fa-trash"></i></a>' 
                     : '<a href="?subdir='.urlencode($file).'" class="btn-open"><i class="fas fa-folder-open"></i></a>').'
@@ -158,12 +162,15 @@ function display_files($dir) {
             background: #f0f2f5;
             min-height: 100vh;
             padding: 2rem;
+            background-image: url('<?= isset($_GET['preview']) && in_array(pathinfo($_GET['preview'], PATHINFO_EXTENSION), ['jpg', 'jpeg', 'png']) ? $upload_dir . urlencode($_GET['preview']) : '' ?>');
+            background-size: cover;
+            background-position: center;
         }
         
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            background: white;
+            background: rgba(255, 255, 255, 0.95);
             border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             padding: 2rem;
@@ -258,6 +265,11 @@ function display_files($dir) {
             color: white;
         }
         
+        .btn-preview {
+            background: #f1c40f;
+            color: white;
+        }
+        
         .btn:hover {
             opacity: 0.9;
             transform: translateY(-1px);
@@ -322,4 +334,4 @@ function display_files($dir) {
     </div>
     <?php endif; ?>
 </body>
-            </html>
+    </html>
