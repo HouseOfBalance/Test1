@@ -199,7 +199,7 @@ function display_files($dir) {
             font-family: 'Segoe UI', sans-serif; 
             background: #f0f2f5;
             min-height: 100vh;
-            padding: 2rem;
+            padding: 1rem;
             background-image: url('<?= isset($_GET['preview']) && in_array(pathinfo($_GET['preview'], PATHINFO_EXTENSION), ['jpg', 'jpeg', 'png']) ? $upload_dir . urlencode($_GET['preview']) : '' ?>');
             background-size: cover;
             background-position: center;
@@ -211,14 +211,14 @@ function display_files($dir) {
             background: rgba(255, 255, 255, 0.95);
             border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            padding: 2rem;
+            padding: 1rem;
         }
         
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 2rem;
+            margin-bottom: 1.5rem;
             padding-bottom: 1rem;
             border-bottom: 1px solid #eee;
         }
@@ -230,7 +230,7 @@ function display_files($dir) {
         
         .upload-section {
             background: #f8f9fa;
-            padding: 1.5rem;
+            padding: 1rem;
             border-radius: 8px;
         }
         
@@ -345,22 +345,38 @@ function display_files($dir) {
         }
 
         @media (max-width: 768px) {
+            body {
+                padding: 0.5rem;
+            }
             .container {
-                padding: 1rem;
+                padding: 0.5rem;
+                border-radius: 0;
             }
             .header {
                 flex-direction: column;
                 align-items: flex-start;
+                margin-bottom: 1rem;
             }
             .upload-section {
-                padding: 1rem;
+                padding: 0.5rem;
             }
             .file-item {
                 flex-direction: column;
                 align-items: flex-start;
+                padding: 0.5rem;
             }
             .file-actions {
                 margin-top: 0.5rem;
+                flex-wrap: wrap;
+            }
+            .btn {
+                width: 100%;
+                justify-content: center;
+                margin-bottom: 0.5rem;
+            }
+            .login-box {
+                margin: 2rem auto;
+                padding: 1rem;
             }
         }
     </style>
