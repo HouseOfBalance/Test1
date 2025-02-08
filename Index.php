@@ -6,7 +6,6 @@ $upload_dir = 'C:/nas_storage/';
 $max_file_size = 1024 * 1024 * 500; // 500MB
 $max_folder_size = 1024 * 1024 * 1024 * 5; // 5GB
 $log_file = 'C:/nas_storage/log.txt';
-$allowed_file_types = ['jpg', 'jpeg', 'png', 'pdf', 'txt', 'mp4', 'webm'];
 $users = [
     'admin' => password_hash('admin123', PASSWORD_BCRYPT),
 ];
@@ -80,7 +79,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['files'])) {
         $file_size = $_FILES['files']['size'][$key];
         $file_tmp = $_FILES['files']['tmp_name'][$key];
         $file_error = $_FILES['files']['error'][$key];
-        $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
 
         if ($file_error !== UPLOAD_ERR_OK) {
             $errors[] = "Lỗi khi upload file $file_name";
@@ -89,11 +87,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['files'])) {
 
         if ($file_size > $max_file_size) {
             $errors[] = "File $file_name vượt quá kích thước cho phép (500MB)";
-            continue;
-        }
-
-        if (!in_array($file_ext, $allowed_file_types) && $file_ext !== '') {
-            $errors[] = "Loại file $file_name không được hỗ trợ";
             continue;
         }
 
@@ -455,4 +448,4 @@ function display_files($dir) {
     </script>
     <?php endif; ?>
 </body>
-</html>
+    </html>
