@@ -3,7 +3,8 @@ session_start();
 
 // Cấu hình hệ thống
 $upload_dir = 'C:/nas_storage/';
-$max_file_size = 1024 * 1024 * 100; // 100MB
+$max_file_size = 1024 * 1024 * 500; // 500MB
+$max_folder_size = 1024 * 1024 * 1024 * 5; // 5GB
 $log_file = 'C:/nas_storage/log.txt';
 $allowed_file_types = ['jpg', 'jpeg', 'png', 'pdf', 'txt', 'mp4', 'webm'];
 $users = [
@@ -51,32 +52,67 @@ if (isset($_GET['logout'])) {
     exit;
 }
 
-// Xử lý upload file
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
+// Hàm tính kích thước thư mục
+function calculate_folder_size($path) {
+    $size = 0;
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path)) as $file) {
+        $size += $file->getSize();
+    }
+    return $size;
+}
+
+// Xử lý upload file hoặc thư mục
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['files'])) {
     if (!verify_csrf_token($_POST['csrf_token'])) {
         die("CSRF token không hợp lệ");
     }
 
-    $file = $_FILES['file'];
     $subdir = isset($_POST['subdir']) ? trim($_POST['subdir'], '/') . '/' : '';
     $target_dir = $upload_dir . $subdir;
 
     if (!is_dir($target_dir)) mkdir($target_dir, 0777, true);
-    
-    if ($file['error'] !== UPLOAD_ERR_OK) die("Upload error: " . $file['error']);
-    if ($file['size'] > $max_file_size) die("File vượt quá 100MB");
 
-    $file_ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-    if (!in_array($file_ext, $allowed_file_types)) die("Loại file không được hỗ trợ");
+    $uploaded_files = [];
+    $errors = [];
 
-    $file_name = uniqid() . '_' . basename($file['name']);
-    $target_path = $target_dir . $file_name;
+    foreach ($_FILES['files']['tmp_name'] as $key => $tmp_name) {
+        $file_name = $_FILES['files']['name'][$key];
+        $file_size = $_FILES['files']['size'][$key];
+        $file_tmp = $_FILES['files']['tmp_name'][$key];
+        $file_error = $_FILES['files']['error'][$key];
+        $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
 
-    if (move_uploaded_file($file['tmp_name'], $target_path)) {
-        log_activity("User {$_SESSION['username']} uploaded: $subdir$file_name");
-        $_SESSION['upload_success'] = $file_name;
-    } else {
-        $_SESSION['upload_error'] = true;
+        if ($file_error !== UPLOAD_ERR_OK) {
+            $errors[] = "Lỗi khi upload file $file_name";
+            continue;
+        }
+
+        if ($file_size > $max_file_size) {
+            $errors[] = "File $file_name vượt quá kích thước cho phép (500MB)";
+            continue;
+        }
+
+        if (!in_array($file_ext, $allowed_file_types) && $file_ext !== '') {
+            $errors[] = "Loại file $file_name không được hỗ trợ";
+            continue;
+        }
+
+        $new_file_name = uniqid() . '_' . basename($file_name);
+        $target_path = $target_dir . $new_file_name;
+
+        if (move_uploaded_file($file_tmp, $target_path)) {
+            $uploaded_files[] = $new_file_name;
+            log_activity("User {$_SESSION['username']} uploaded: $subdir$new_file_name");
+        } else {
+            $errors[] = "Không thể upload file $file_name";
+        }
+    }
+
+    if (!empty($uploaded_files)) {
+        $_SESSION['upload_success'] = implode(', ', $uploaded_files);
+    }
+    if (!empty($errors)) {
+        $_SESSION['upload_error'] = implode('<br>', $errors);
     }
     header("Location: " . $_SERVER['PHP_SELF']);
     exit;
@@ -339,7 +375,7 @@ function display_files($dir) {
         
         <?php if (isset($_SESSION['upload_error'])): ?>
         <div class="toast error">
-            Upload thất bại!
+            <?= $_SESSION['upload_error'] ?>
             <?php unset($_SESSION['upload_error']); ?>
         </div>
         <?php endif; ?>
@@ -355,7 +391,7 @@ function display_files($dir) {
         <div class="file-manager">
             <div class="upload-section">
                 <form method="post" enctype="multipart/form-data" style="display: flex; gap: 1rem;">
-                    <input type="file" name="file" required 
+                    <input type="file" name="files[]" multiple required 
                         style="flex-grow: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 6px;">
                     <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
                     <button type="submit" class="btn btn-download">
