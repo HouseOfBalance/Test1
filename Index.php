@@ -5,7 +5,7 @@ session_start();
 $upload_dir = 'C:/nas_storage/';
 $max_file_size = 1024 * 1024 * 100; // 100MB
 $log_file = 'C:/nas_storage/log.txt';
-$allowed_file_types = ['jpg', 'jpeg', 'png', 'pdf', 'txt', 'mp4', 'webm']; // Các loại file cho phép
+$allowed_file_types = ['jpg', 'jpeg', 'png', 'pdf', 'txt', 'mp4', 'webm'];
 $users = [
     'admin' => password_hash('admin123', PASSWORD_BCRYPT),
 ];
@@ -36,7 +36,7 @@ if (isset($_POST['login'])) {
     $password = $_POST['password'];
     if (isset($users[$username]) && password_verify($password, $users[$username])) {
         $_SESSION['username'] = $username;
-        session_regenerate_id(true); // Tăng cường bảo mật session
+        session_regenerate_id(true);
         log_activity("User $username logged in.");
     } else {
         die("Đăng nhập thất bại");
@@ -69,15 +69,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
     $file_ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
     if (!in_array($file_ext, $allowed_file_types)) die("Loại file không được hỗ trợ");
 
-    $file_name = uniqid() . '_' . basename($file['name']); // Đổi tên file để tránh xung đột
+    $file_name = uniqid() . '_' . basename($file['name']);
     $target_path = $target_dir . $file_name;
 
     if (move_uploaded_file($file['tmp_name'], $target_path)) {
         log_activity("User {$_SESSION['username']} uploaded: $subdir$file_name");
-        echo "<script>alert('Upload thành công: $file_name')</script>";
+        $_SESSION['upload_success'] = $file_name;
     } else {
-        echo "<script>alert('Upload thất bại')</script>";
+        $_SESSION['upload_error'] = true;
     }
+    header("Location: " . $_SERVER['PHP_SELF']);
+    exit;
 }
 
 // Xử lý download file
@@ -283,6 +285,28 @@ function display_files($dir) {
             border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
+        
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 8px;
+            color: white;
+            background: #4CAF50;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            animation: slideIn 0.5s ease-out;
+            z-index: 1000;
+        }
+        
+        .toast.error {
+            background: #f44336;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
+        }
     </style>
 </head>
 <body>
@@ -306,6 +330,20 @@ function display_files($dir) {
     </div>
     <?php else: ?>
     <div class="container">
+        <?php if (isset($_SESSION['upload_success'])): ?>
+        <div class="toast">
+            Upload thành công: <?= htmlspecialchars($_SESSION['upload_success']) ?>
+            <?php unset($_SESSION['upload_success']); ?>
+        </div>
+        <?php endif; ?>
+        
+        <?php if (isset($_SESSION['upload_error'])): ?>
+        <div class="toast error">
+            Upload thất bại!
+            <?php unset($_SESSION['upload_error']); ?>
+        </div>
+        <?php endif; ?>
+
         <div class="header">
             <h1><i class="fas fa-server"></i> NAS System</h1>
             <div style="display: flex; gap: 1rem; align-items: center;">
@@ -332,6 +370,17 @@ function display_files($dir) {
             </div>
         </div>
     </div>
+    <script>
+        // Tự động ẩn toast sau 3 giây
+        document.addEventListener('DOMContentLoaded', function() {
+            const toasts = document.querySelectorAll('.toast');
+            toasts.forEach(toast => {
+                setTimeout(() => {
+                    toast.remove();
+                }, 3000);
+            });
+        });
+    </script>
     <?php endif; ?>
 </body>
-    </html>
+</html>
