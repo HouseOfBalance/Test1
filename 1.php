@@ -70,7 +70,7 @@ if (isset($_GET['step']) && $_GET['step'] == 'second_auth') {
         $second_password = $_POST['second_password'];
 
         // Dummy personal password validation (replace with real logic)
-        if ($second_password === 'tranvankhanh') {
+        if ($second_password === 'mypersonalpass') {
             $_SESSION['second_auth'] = true;
             header('Location: ?step=main');
             exit();
@@ -492,7 +492,7 @@ if (isset($_GET['step']) && $_GET['step'] == 'main') {
             <?php endif; ?>
             
             <?php if (isset($_SESSION['upload_error'])): ?>
-                        <div class="toast error">
+            <div class="toast error">
                 <?= $_SESSION['upload_error'] ?>
                 <?php unset($_SESSION['upload_error']); ?>
             </div>
