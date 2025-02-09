@@ -2,11 +2,6 @@
 <?php
 session_start();
 
-// Existing code from the uploaded file
-{uploaded_php_content}
-
-// Additional functionality starts here
-
 // Login handler
 if (!isset($_GET['step']) || $_GET['step'] == 'login') {
     if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['username'], $_POST['password'])) {
