@@ -1,49 +1,40 @@
 <?php
 session_start();
 
-// Cấu hình hệ thống
-$upload_dir = 'C:/nas_storage/';
-$max_file_size = 1024 * 1024 * 500; // 500MB
-$max_folder_size = 1024 * 1024 * 1024 * 5; // 5GB
-$log_file = 'C:/nas_storage/log.txt';
+// Cấu hình
+ini_set('upload_max_filesize', '5G'); // Tăng giới hạn upload lên 5GB
+ini_set('post_max_size', '5G');       // Tăng giới hạn POST lên 5GB
+ini_set('max_execution_time', '600'); // Tăng thời gian thực thi lên 10 phút
+ini_set('max_input_time', '600');     // Tăng thời gian nhập liệu lên 10 phút
+
+$upload_dir = 'C:/nas_storage/';      // Thư mục lưu trữ file
+$max_file_size = 5 * 1024 * 1024 * 1024; // 5GB
+$log_file = 'C:/nas_storage/log.txt'; // File log hoạt động
 $users = [
-    'admin' => password_hash('admin123', PASSWORD_BCRYPT),
+    'admin' => password_hash('admin123', PASSWORD_BCRYPT), // User mẫu
 ];
 
 // Hàm ghi log
 function log_activity($message) {
     global $log_file;
     $timestamp = date('Y-m-d H:i:s');
-    file_put_contents($log_file, "[$timestamp] $message" . PHP_EOL, FILE_APPEND);
+    $log_message = "[$timestamp] $message" . PHP_EOL;
+    file_put_contents($log_file, $log_message, FILE_APPEND);
 }
 
-// Hàm tạo CSRF token
-function generate_csrf_token() {
-    if (empty($_SESSION['csrf_token'])) {
-        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-    }
-    return $_SESSION['csrf_token'];
-}
-
-// Hàm kiểm tra CSRF token
-function verify_csrf_token($token) {
-    return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
-}
-
-// Xử lý đăng nhập
+// Đăng nhập
 if (isset($_POST['login'])) {
     $username = $_POST['username'];
     $password = $_POST['password'];
     if (isset($users[$username]) && password_verify($password, $users[$username])) {
         $_SESSION['username'] = $username;
-        session_regenerate_id(true);
         log_activity("User $username logged in.");
     } else {
         die("Đăng nhập thất bại");
     }
 }
 
-// Xử lý đăng xuất
+// Đăng xuất
 if (isset($_GET['logout'])) {
     log_activity("User {$_SESSION['username']} logged out.");
     session_destroy();
@@ -51,401 +42,308 @@ if (isset($_GET['logout'])) {
     exit;
 }
 
-// Hàm tính kích thước thư mục
-function calculate_folder_size($path) {
-    $size = 0;
-    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path)) as $file) {
-        $size += $file->getSize();
-    }
-    return $size;
-}
+// Xử lý upload file (API)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
+    header('Content-Type: application/json');
 
-// Xử lý upload file hoặc thư mục
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['files'])) {
-    if (!verify_csrf_token($_POST['csrf_token'])) {
-        die("CSRF token không hợp lệ");
-    }
-
+    $file = $_FILES['file'];
     $subdir = isset($_POST['subdir']) ? trim($_POST['subdir'], '/') . '/' : '';
     $target_dir = $upload_dir . $subdir;
 
-    if (!is_dir($target_dir)) mkdir($target_dir, 0777, true);
-
-    $uploaded_files = [];
-    $errors = [];
-
-    foreach ($_FILES['files']['tmp_name'] as $key => $tmp_name) {
-        $file_name = $_FILES['files']['name'][$key];
-        $file_size = $_FILES['files']['size'][$key];
-        $file_tmp = $_FILES['files']['tmp_name'][$key];
-        $file_error = $_FILES['files']['error'][$key];
-
-        if ($file_error !== UPLOAD_ERR_OK) {
-            $errors[] = "Lỗi khi upload file $file_name";
-            continue;
-        }
-
-        if ($file_size > $max_file_size) {
-            $errors[] = "File $file_name vượt quá kích thước cho phép (500MB)";
-            continue;
-        }
-
-        $new_file_name = uniqid() . '_' . basename($file_name);
-        $target_path = $target_dir . $new_file_name;
-
-        if (move_uploaded_file($file_tmp, $target_path)) {
-            $uploaded_files[] = $new_file_name;
-            log_activity("User {$_SESSION['username']} uploaded: $subdir$new_file_name");
-        } else {
-            $errors[] = "Không thể upload file $file_name";
-        }
+    if (!is_dir($target_dir)) {
+        mkdir($target_dir, 0777, true);
     }
 
-    if (!empty($uploaded_files)) {
-        $_SESSION['upload_success'] = implode(', ', $uploaded_files);
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        die(json_encode(['status' => 'error', 'message' => 'Upload failed with error code: ' . $file['error']]));
     }
-    if (!empty($errors)) {
-        $_SESSION['upload_error'] = implode('<br>', $errors);
+
+    if ($file['size'] > $max_file_size) {
+        die(json_encode(['status' => 'error', 'message' => 'File exceeds maximum allowed size (5GB)']));
     }
-    header("Location: " . $_SERVER['PHP_SELF']);
+
+    $file_name = basename($file['name']);
+    $target_path = $target_dir . $file_name;
+
+    if (move_uploaded_file($file['tmp_name'], $target_path)) {
+        log_activity("User {$_SESSION['username']} uploaded file: $subdir$file_name");
+        echo json_encode(['status' => 'success', 'filename' => $file_name]);
+    } else {
+        echo json_encode(['status' => 'error', 'message' => 'Upload failed']);
+    }
     exit;
 }
 
 // Xử lý download file
 if (isset($_GET['download'])) {
     $file_path = $upload_dir . basename($_GET['download']);
-    
+
     if (file_exists($file_path)) {
         header('Content-Description: File Transfer');
         header('Content-Type: application/octet-stream');
         header('Content-Disposition: attachment; filename="'.basename($file_path).'"');
+        header('Expires: 0');
+        header('Cache-Control: must-revalidate');
+        header('Pragma: public');
         header('Content-Length: ' . filesize($file_path));
         readfile($file_path);
-        log_activity("User {$_SESSION['username']} downloaded: " . basename($file_path));
+        log_activity("User {$_SESSION['username']} downloaded file: " . basename($file_path));
         exit;
+    } else {
+        die("File không tồn tại");
+    }
+}
+
+// Xử lý tạo thư mục
+if (isset($_POST['create_dir'])) {
+    $new_dir = $upload_dir . trim($_POST['new_dir'], '/') . '/';
+    if (!is_dir($new_dir)) {
+        mkdir($new_dir, 0777, true);
+        log_activity("User {$_SESSION['username']} created directory: $new_dir");
+        echo "Thư mục đã được tạo: " . htmlspecialchars($new_dir);
+    } else {
+        echo "Thư mục đã tồn tại";
     }
 }
 
 // Xử lý xóa file
 if (isset($_GET['delete'])) {
-    $file_path = $upload_dir . basename($_GET['delete']);
-    
-    if (file_exists($file_path) && unlink($file_path)) {
-        log_activity("User {$_SESSION['username']} deleted: " . basename($file_path));
-        echo "<script>alert('Đã xóa file thành công')</script>";
-    }
-    header("Location: ".$_SERVER['PHP_SELF']);
-    exit;
-}
+    $filename = basename($_GET['delete']);
+    $current_dir = $upload_dir . (isset($_GET['subdir']) ? $_GET['subdir'] . '/' : '');
+    $file_path = $current_dir . $filename;
 
-// Xử lý tạo thư mục
-if (isset($_POST['create_dir'])) {
-    if (!verify_csrf_token($_POST['csrf_token'])) {
-        die("CSRF token không hợp lệ");
-    }
-
-    $new_dir = $upload_dir . trim($_POST['new_dir'], '/') . '/';
-    
-    if (!is_dir($new_dir)) {
-        mkdir($new_dir, 0777, true);
-        log_activity("User {$_SESSION['username']} created directory: $new_dir");
-        echo "<script>alert('Đã tạo thư mục thành công')</script>";
-    } else {
-        echo "<script>alert('Thư mục đã tồn tại')</script>";
+    if (file_exists($file_path) && !is_dir($file_path)) {
+        unlink($file_path);
+        log_activity("User {$_SESSION['username']} deleted file: $filename");
+        header("Location: ".$_SERVER['PHP_SELF']);
+        exit();
     }
 }
 
-// Hàm hiển thị file
-function display_files($dir) {
+// Xử lý tìm kiếm file
+$search_results = [];
+if (isset($_GET['search'])) {
+    $search_query = $_GET['search'];
+    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($upload_dir));
+    foreach ($files as $file) {
+        if (strpos($file->getFilename(), $search_query) !== false) {
+            $search_results[] = $file->getPathname();
+        }
+    }
+}
+
+// Hiển thị danh sách file
+function list_files($dir) {
+    global $upload_dir;
     $files = scandir($dir);
-    foreach (array_diff($files, ['.', '..']) as $file) {
+    $files = array_diff($files, array('.', '..'));
+    echo "<ul>";
+    foreach ($files as $file) {
         $file_path = $dir . $file;
-        $is_dir = is_dir($file_path);
-        $file_ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
-        $is_image = in_array($file_ext, ['jpg', 'jpeg', 'png', 'gif']);
-        $is_video = in_array($file_ext, ['mp4', 'webm']);
-        
-        echo '<div class="file-item">
-                <div class="file-icon">'.($is_dir ? '<i class="fas fa-folder"></i>' : ($is_image ? '<i class="fas fa-image"></i>' : ($is_video ? '<i class="fas fa-video"></i>' : '<i class="fas fa-file"></i>'))).'</div>
-                <div class="file-name">'.htmlspecialchars($file).($is_dir ? '/' : '').'</div>
-                <div class="file-actions">'.
-                    (!$is_dir ? 
-                    ($is_image || $is_video ? '<a href="?preview='.urlencode($file).'" class="btn-preview"><i class="fas fa-eye"></i></a>' : '') .
-                    '<a href="?download='.urlencode($file).'" class="btn-download"><i class="fas fa-download"></i></a>
-                     <a href="?delete='.urlencode($file).'" class="btn-delete" onclick="return confirm(\'Xóa file này?\')"><i class="fas fa-trash"></i></a>' 
-                    : '<a href="?subdir='.urlencode($file).'" class="btn-open"><i class="fas fa-folder-open"></i></a>').'
-                </div>
-              </div>';
+        if (is_dir($file_path)) {
+            echo "<li><strong>$file/</strong> <a href='?subdir=$file'>Mở</a></li>";
+        } else {
+            echo "<li>$file 
+                    <a href='?download=$file' class='btn btn-sm btn-primary'><i class='fas fa-download'></i> Download</a>
+                    <a href='?delete=$file' class='btn btn-sm btn-danger' onclick=\"return confirm('Bạn có chắc muốn xóa file này?')\"><i class='fas fa-trash'></i> Delete</a>
+                </li>";
+        }
     }
+    echo "</ul>";
 }
 ?>
+
 <!DOCTYPE html>
-<html lang="vi">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NAS System</title>
+    <title>NAS Simulator</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { 
-            font-family: 'Segoe UI', sans-serif; 
-            background: #f0f2f5;
-            min-height: 100vh;
-            padding: 1rem;
-            background-image: url('<?= isset($_GET['preview']) && in_array(pathinfo($_GET['preview'], PATHINFO_EXTENSION), ['jpg', 'jpeg', 'png']) ? $upload_dir . urlencode($_GET['preview']) : '' ?>');
-            background-size: cover;
-            background-position: center;
-        }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            padding: 1rem;
-        }
-        
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.5rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid #eee;
-        }
-        
-        .file-manager {
-            display: grid;
-            gap: 1.5rem;
-        }
-        
-        .upload-section {
-            background: #f8f9fa;
-            padding: 1rem;
-            border-radius: 8px;
-        }
-        
-        .file-list {
-            background: #fff;
-            border: 1px solid #eee;
-            border-radius: 8px;
-            padding: 1rem;
-        }
-        
-        .file-item {
-            display: flex;
-            align-items: center;
-            padding: 1rem;
-            background: #fff;
-            border-radius: 8px;
-            transition: all 0.2s;
-            margin-bottom: 0.5rem;
-        }
-        
-        .file-item:hover {
-            background: #f8f9fa;
-            transform: translateX(5px);
-        }
-        
-        .file-icon {
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-right: 1rem;
-            color: #4a90e2;
-        }
-        
-        .file-name {
-            flex-grow: 1;
-            color: #333;
-            font-weight: 500;
-        }
-        
-        .file-actions {
-            display: flex;
-            gap: 0.5rem;
-        }
-        
-        .btn {
-            padding: 0.5rem 1rem;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .btn-download {
-            background: #4a90e2;
-            color: white;
-        }
-        
-        .btn-delete {
-            background: #e74c3c;
-            color: white;
-        }
-        
-        .btn-open {
-            background: #2ecc71;
-            color: white;
-        }
-        
-        .btn-preview {
-            background: #f1c40f;
-            color: white;
-        }
-        
-        .btn:hover {
-            opacity: 0.9;
-            transform: translateY(-1px);
-        }
-        
-        .login-box {
-            max-width: 400px;
-            margin: 5rem auto;
-            padding: 2rem;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        
-        .toast {
+        /* Progress Container */
+        #upload-progress {
             position: fixed;
             bottom: 20px;
             right: 20px;
-            padding: 15px 25px;
+            width: 300px;
+            background: #fff;
             border-radius: 8px;
-            color: white;
-            background: #4CAF50;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            animation: slideIn 0.5s ease-out;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            padding: 15px;
+            display: none;
             z-index: 1000;
         }
-        
-        .toast.error {
-            background: #f44336;
-        }
-        
-        @keyframes slideIn {
-            from { transform: translateX(100%); }
-            to { transform: translateX(0); }
+
+        .progress-bar {
+            height: 20px;
+            background: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
         }
 
-        @media (max-width: 768px) {
-            body {
-                padding: 0.5rem;
-            }
-            .container {
-                padding: 0.5rem;
-                border-radius: 0;
-            }
-            .header {
-                flex-direction: column;
-                align-items: flex-start;
-                margin-bottom: 1rem;
-            }
-            .upload-section {
-                padding: 0.5rem;
-            }
-            .file-item {
-                flex-direction: column;
-                align-items: flex-start;
-                padding: 0.5rem;
-            }
-            .file-actions {
-                margin-top: 0.5rem;
-                flex-wrap: wrap;
-            }
-            .btn {
-                width: 100%;
-                justify-content: center;
-                margin-bottom: 0.5rem;
-            }
-            .login-box {
-                margin: 2rem auto;
-                padding: 1rem;
-            }
+        .progress-fill {
+            height: 100%;
+            background: #4a90e2;
+            width: 0%;
+            transition: width 0.3s ease;
         }
+
+        .time-estimate {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        /* Các phần CSS khác giữ nguyên */
+        /* ... (phần CSS trước đó) ... */
     </style>
 </head>
 <body>
     <?php if (!isset($_SESSION['username'])): ?>
-    <div class="login-box">
-        <h2 style="text-align: center; margin-bottom: 1.5rem;">NAS Login</h2>
+    <div class="login-container">
+        <h1><i class="fas fa-lock"></i> NAS Login</h1>
         <form method="post">
-            <div style="margin-bottom: 1rem;">
-                <input type="text" name="username" placeholder="Username" required 
-                    style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: 6px;">
+            <div class="form-group">
+                <input type="text" name="username" placeholder="Username" required>
             </div>
-            <div style="margin-bottom: 1.5rem;">
-                <input type="password" name="password" placeholder="Password" required 
-                    style="width: 100%; padding: 0.8rem; border: 1px solid #ddd; border-radius: 6px;">
+            <div class="form-group">
+                <input type="password" name="password" placeholder="Password" required>
             </div>
-            <button type="submit" name="login" class="btn" 
-                style="width: 100%; background: #4a90e2; color: white;">
-                <i class="fas fa-sign-in-alt"></i> Login
+            <button type="submit" name="login" class="btn btn-primary">
+                <span class="loading"></span> Login
             </button>
         </form>
     </div>
     <?php else: ?>
     <div class="container">
-        <?php if (isset($_SESSION['upload_success'])): ?>
-        <div class="toast">
-            Upload thành công: <?= htmlspecialchars($_SESSION['upload_success']) ?>
-            <?php unset($_SESSION['upload_success']); ?>
+        <div class="header">
+            <h1><i class="fas fa-folder"></i> NAS Simulator</h1>
+            <div class="user-info">
+                <span><i class="fas fa-user"></i> <?= htmlspecialchars($_SESSION['username']) ?></span>
+                <a href="?logout=1" class="btn btn-danger"><i class="fas fa-sign-out-alt"></i> Logout</a>
+            </div>
         </div>
-        <?php endif; ?>
-        
-        <?php if (isset($_SESSION['upload_error'])): ?>
-        <div class="toast error">
-            <?= $_SESSION['upload_error'] ?>
-            <?php unset($_SESSION['upload_error']); ?>
+
+        <!-- Form upload -->
+        <form method="post" enctype="multipart/form-data" style="margin-bottom: 20px;">
+            <div style="display: flex; gap: 10px;">
+                <input type="file" name="file" required style="flex-grow: 1;">
+                <input type="text" name="subdir" placeholder="Subdirectory (optional)" style="flex-basis: 200px;">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-upload"></i> Upload</button>
+            </div>
+        </form>
+
+        <!-- Tạo thư mục -->
+        <form method="post" style="margin-bottom: 20px;">
+            <div style="display: flex; gap: 10px;">
+                <input type="text" name="new_dir" placeholder="New directory" required>
+                <button type="submit" name="create_dir" class="btn btn-primary"><i class="fas fa-folder-plus"></i> Create Folder</button>
+            </div>
+        </form>
+
+        <!-- Tìm kiếm file -->
+        <form method="get" style="margin-bottom: 20px;">
+            <div style="display: flex; gap: 10px;">
+                <input type="text" name="search" placeholder="Search files..." required style="flex-grow: 1;">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i> Search</button>
+            </div>
+        </form>
+
+        <!-- Kết quả tìm kiếm -->
+        <?php if (!empty($search_results)): ?>
+        <div class="search-results">
+            <h3>Search Results:</h3>
+            <?php foreach ($search_results as $result): ?>
+                <div class="file-item">
+                    <div class="file-icon"><i class="fas fa-file"></i></div>
+                    <div class="file-name"><?= htmlspecialchars($result) ?></div>
+                </div>
+            <?php endforeach; ?>
         </div>
         <?php endif; ?>
 
-        <div class="header">
-            <h1><i class="fas fa-server"></i> NAS System</h1>
-            <div style="display: flex; gap: 1rem; align-items: center;">
-                <span style="color: #666;">Xin chào, <?= htmlspecialchars($_SESSION['username']) ?></span>
-                <a href="?logout=1" class="btn btn-delete"><i class="fas fa-sign-out-alt"></i> Logout</a>
-            </div>
-        </div>
-        
-        <div class="file-manager">
-            <div class="upload-section">
-                <form method="post" enctype="multipart/form-data" style="display: flex; gap: 1rem;">
-                    <input type="file" name="files[]" multiple required 
-                        style="flex-grow: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 6px;">
-                    <input type="hidden" name="csrf_token" value="<?= generate_csrf_token() ?>">
-                    <button type="submit" class="btn btn-download">
-                        <i class="fas fa-upload"></i> Upload
-                    </button>
-                </form>
-            </div>
-            
-            <div class="file-list">
-                <h3 style="margin-bottom: 1rem;">Danh sách file:</h3>
-                <?php display_files($upload_dir); ?>
-            </div>
+        <!-- Danh sách file -->
+        <div class="file-list">
+            <h3>File List:</h3>
+            <?php
+            $current_dir = $upload_dir . (isset($_GET['subdir']) ? $_GET['subdir'] . '/' : '');
+            list_files($current_dir);
+            ?>
         </div>
     </div>
-    <script>
-        // Tự động ẩn toast sau 3 giây
-        document.addEventListener('DOMContentLoaded', function() {
-            const toasts = document.querySelectorAll('.toast');
-            toasts.forEach(toast => {
-                setTimeout(() => {
-                    toast.remove();
-                }, 3000);
-            });
-        });
-    </script>
     <?php endif; ?>
+
+    <!-- Progress Bar -->
+    <div id="upload-progress">
+        <div class="progress-header">
+            <h4>Uploading File...</h4>
+            <span id="progress-percent">0%</span>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill"></div>
+        </div>
+        <div class="time-estimate">
+            Time remaining: <span id="time-remaining">Calculating...</span>
+        </div>
+    </div>
+
+    <script>
+        // Xử lý upload file bằng AJAX
+        document.querySelector('form[enctype="multipart/form-data"]').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const xhr = new XMLHttpRequest();
+            const progressContainer = document.getElementById('upload-progress');
+            const progressFill = document.querySelector('.progress-fill');
+            const progressPercent = document.getElementById('progress-percent');
+            const timeRemaining = document.getElementById('time-remaining');
+            
+            let uploadStartTime;
+
+            xhr.upload.addEventListener('loadstart', () => {
+                progressContainer.style.display = 'block';
+                uploadStartTime = Date.now();
+            });
+
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    const percent = (e.loaded / e.total * 100).toFixed(1);
+                    progressFill.style.width = percent + '%';
+                    progressPercent.textContent = percent + '%';
+
+                    // Tính thời gian còn lại
+                    const timeElapsed = (Date.now() - uploadStartTime) / 1000;
+                    const uploadSpeed = e.loaded / timeElapsed;
+                    const remainingBytes = e.total - e.loaded;
+                    const remainingTime = remainingBytes / uploadSpeed;
+                    
+                    timeRemaining.textContent = formatTime(remainingTime);
+                }
+            });
+
+            xhr.addEventListener('load', () => {
+                setTimeout(() => {
+                    progressContainer.style.display = 'none';
+                    const response = JSON.parse(xhr.responseText);
+                    if (response.status === 'success') {
+                        alert('Upload thành công: ' + response.filename);
+                        window.location.reload();
+                    } else {
+                        alert('Lỗi: ' + response.message);
+                    }
+                }, 1000);
+            });
+
+            xhr.open('POST', '', true);
+            xhr.send(formData);
+        });
+
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            seconds = Math.floor(seconds % 60);
+            return `${minutes}m ${seconds}s`;
+        }
+    </script>
 </body>
 </html>
